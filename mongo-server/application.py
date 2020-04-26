@@ -1,24 +1,9 @@
+from flask import Flask, jsonify
+from flask import request
 from time import gmtime, strftime
 import json
 
-from flask import Flask, jsonify
-from flask import request
-import pymongo
-from pymongo import MongoClient
-from pywallet import wallet
-from web3 import Web3, HTTPProvider
 import mongoDBhelper as mongoHelp
-
-# import config
-
-
-#w["xprivate_key"] is the private key for the created wallet
-mongoUrl = "mongodb+srv://{user}:{password}@{server}/test?retryWrites=true&w=majority".format(
-                user=config.MONGO_USER, password=config.MONGO_PASSWORD, server=config.MONGO_SERVER
-            )
-
-
-ABI = json.load(open("Validator.json", "r"))['abi']
 
 # oauthToken = "sampleOauth5"
 app = Flask(__name__)
@@ -29,8 +14,10 @@ def createNewUser():
     #check to see if account from oauthToken is already created
     oauthJson = request.get_json()
     oauthToken = oauthJson["oauthtoken"]
-    return mongoHelp.login(oauthToken)
 
+    msg = mongoHelp.login(oauthToken)
+
+    return jsonify({ "status" : msg }), 201
 
 #web3py contract calls
 # args: oauthtoken, qrhash
@@ -40,7 +27,16 @@ def createItem():
     oauthToken = oauthJson["oauthtoken"]
     qrHash = oauthJson["qrhash"]
     # mnemonic = logIn(oauthToken)
-    return mongoHelp.createItem(oauthToken, qrHash)
+    msg, statusCode = mongoHelp.createItem(oauthToken, qrHash)
+
+    if statusCode == 403:
+        return jsonify({ "status" : msg}), statusCode
+
+    return jsonify({
+        'status': msg,
+        'transactionId': str(qrHash),
+        'timeCreated' : strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
+    }), statusCode
 
 
 # args: oauthtoken
@@ -48,15 +44,17 @@ def createItem():
 def getHistory():
     oauthJson = request.get_json()
     oauthToken = oauthJson["oauthtoken"]
-    return mongoHelp.getHistory(oauthToken)
+    txs = mongoHelp.getHistory(oauthToken)
+
+    return jsonify({ 'transactions': txs }), 200
 
 
-# need to switch to mongoDB
 @app.route('/getBalance', methods=['POST'])
 def getBalance():
     oauthJson = request.get_json()
     oauthToken = oauthJson["oauthtoken"]
-    return mongoHelp.getBalance(oauthToken)
+    balance = mongoHelp.getBalance(oauthToken)
+    return jsonify({ 'balance': balance}), 200
 
 
 @app.route('/validateItem', methods=['POST'])
@@ -64,7 +62,10 @@ def validateItem():
     oauthJson = request.get_json()
     oauthToken = oauthJson["oauthtoken"]
     qrHash = oauthJson["qrhash"]
-    return mongoHelp.validateItem(qrhash, 1)
+
+    msg, statusCode = mongoHelp.validateItem(qrHash, 1)
+
+    return jsonify({ 'status': msg }), statusCode
 
 @app.route("/")
 def home():

@@ -1,8 +1,5 @@
-import pymongo
 from pymongo import MongoClient
 from time import gmtime, strftime
-import json
-from flask import Flask, jsonify
 
 mongoUrl = "mongodb+srv://user:password12345@cluster0-3s8ia.gcp.mongodb.net/test?retryWrites=true&w=majority"
 cluster = MongoClient(mongoUrl)
@@ -22,10 +19,10 @@ def createNewUser(oauthToken):
 def login(oauthToken):
     try:
         user = userDatabase.find({"OAuth" : oauthToken})[0]
-        return "user logged in"
+        return "User logged in"
     except IndexError:
         createNewUser(oauthToken)
-        return "user created"
+        return "User created"
 
 
 def changeUserBalance(oauthToken, changeVal):
@@ -40,7 +37,7 @@ def changeUserBalance(oauthToken, changeVal):
     }, upsert=False)
     return "user balance changed by " + str(changeVal)
 
-def getUserBalance(oauthToken):
+def getBalance(oauthToken):
     user = userDatabase.find({"OAuth" : oauthToken})[0]
     if user["balance"] == "":
         return 0
@@ -50,24 +47,27 @@ def getUserBalance(oauthToken):
 def getHistory(oauthToken):
     transArr = []
     userHist = transactionDatabase.find({"OAuth" : oauthToken})
+
     for trans in userHist:
+        trans.pop('OAuth', None) # Remove Oauth token from response
         transArr.append(trans)
+    
     return transArr
 
 def createItem(oauthToken, qrhash):
     try:
         trans = transactionDatabase.find({"qrhash" : qrhash})[0]
-        return "item already created"
+        return "Item already exists", 403
     except IndexError:
         post = {
-                "_id" : transactionDatabase.count_documents({}) + 1 ,
-                "OAuth": oauthToken,
-                "qrhash": qrhash,
-                "time" : strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime()),
-                "status" : "unvalidated"
-                }
+            "_id" : transactionDatabase.count_documents({}) + 1 ,
+            "OAuth": oauthToken,
+            "qrhash": qrhash,
+            "time" : strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime()),
+            "status" : "unvalidated"
+        }
         transactionDatabase.insert_one(post)
-        return str(post)
+        return "Item created", 201
 
 
 def validateItem(qrhash, value):
@@ -75,7 +75,7 @@ def validateItem(qrhash, value):
         trans = transactionDatabase.find({"qrhash" : qrhash})[0]
         if trans['status'] == "validated":
             # bottle has already bene validated
-            return "item already validated"
+            return "Item already validated", 403
         else:
             transactionDatabase.update_one({
               '_id': trans["_id"]
@@ -85,12 +85,6 @@ def validateItem(qrhash, value):
               }
             }, upsert=False)
             changeUserBalance(trans["OAuth"], value)
-            return "item has been validated"
+            return "Item has been validated", 200
     except IndexError:
-        return "item has not been created"
-
-print(login("test12"))
-print(createItem("test12", 22))
-print(validateItem(22, 5))
-print(getUserBalance("test12"))
-print(getHistory("test12"))
+        return "Item does not exist", 404
