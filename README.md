@@ -1,1 +1,1 @@
-# Making Earth greener, one bottle at a time
+# Making the Earth greener, one bottle at a time
